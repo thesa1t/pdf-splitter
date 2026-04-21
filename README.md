@@ -31,7 +31,7 @@
 
 ### macOS
 ```bash
-git clone https://github.com/<user>/pdf-splitter.git
+git clone https://github.com/thesa1t/pdf-splitter.git
 cd pdf-splitter
 ./build_macos.sh
 ```
@@ -39,7 +39,7 @@ cd pdf-splitter
 
 ### Windows
 ```batch
-git clone https://github.com/<user>/pdf-splitter.git
+git clone https://github.com/thesa1t/pdf-splitter.git
 cd pdf-splitter
 build_windows.bat
 ```
