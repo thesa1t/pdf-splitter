@@ -1,4 +1,4 @@
-"""PDF Splitter v2 — разделение PDF по настраиваемым паттернам."""
+"""PDF Splitter — разделение PDF по настраиваемым паттернам."""
 
 import os
 import sys
@@ -47,7 +47,7 @@ def _expand_inputs(paths: list[str]) -> list[str]:
 class PDFSplitterApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("PDF Splitter v2")
+        self.root.title("PDF Splitter")
         self.root.geometry("720x620")
         self.root.minsize(560, 480)
 
