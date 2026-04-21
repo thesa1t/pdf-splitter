@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Generate icons
+        run: python build_app.py
+
+      - name: Build .app
+        run: |
+          pyinstaller --noconfirm --windowed --clean \
+            --name "PDF Splitter" \
+            --icon icon.icns \
+            --osx-bundle-identifier com.salt.pdfsplitter \
+            --hidden-import config \
+            --hidden-import pdf_processor \
+            main.py
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg || true
+          create-dmg \
+            --volname "PDF Splitter" \
+            --window-size 540 360 \
+            --icon-size 96 \
+            --icon "PDF Splitter.app" 140 160 \
+            --app-drop-link 400 160 \
+            "PDF-Splitter-macOS.dmg" \
+            "dist/PDF Splitter.app" || \
+          (cd dist && zip -r ../PDF-Splitter-macOS.zip "PDF Splitter.app")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            PDF-Splitter-macOS.dmg
+            PDF-Splitter-macOS.zip
+
+      - name: Attach to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            PDF-Splitter-macOS.dmg
+            PDF-Splitter-macOS.zip
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Generate icons
+        run: python build_app.py
+
+      - name: Build .exe
+        run: >
+          pyinstaller --noconfirm --windowed --clean
+          --name "PDF Splitter"
+          --icon icon.ico
+          --hidden-import config
+          --hidden-import pdf_processor
+          main.py
+
+      - name: Zip artifact
+        shell: pwsh
+        run: Compress-Archive -Path "dist/PDF Splitter/*" -DestinationPath "PDF-Splitter-Windows.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: PDF-Splitter-Windows.zip
+
+      - name: Attach to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: PDF-Splitter-Windows.zip

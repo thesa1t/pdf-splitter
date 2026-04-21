@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# macOS
+.DS_Store
+icon.iconset/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Тестовые артефакты
+Результат/
