@@ -327,6 +327,8 @@ class PatternEditor(tk.Toplevel):
         self.flag_i = tk.BooleanVar()
         self.flag_s = tk.BooleanVar()
         self.flag_m = tk.BooleanVar()
+        self.pages_per_doc_var = tk.IntVar(value=1)
+        self.pages_per_doc_var.trace_add("write", lambda *_: self._mark_dirty())
 
         def field(parent, label, var, width=None):
             f = ttk.Frame(parent)
@@ -353,6 +355,14 @@ class PatternEditor(tk.Toplevel):
         ttk.Checkbutton(flags, text="MULTILINE", variable=self.flag_m,
                         command=self._mark_dirty).pack(side=tk.LEFT)
 
+        pages_row = ttk.Frame(right)
+        pages_row.pack(fill=tk.X, pady=(8, 0))
+        ttk.Label(pages_row, text="Страниц на документ:", width=22).pack(side=tk.LEFT)
+        ttk.Spinbox(pages_row, from_=1, to=100, textvariable=self.pages_per_doc_var,
+                    width=6).pack(side=tk.LEFT)
+        ttk.Label(pages_row, text="— regex ищется в объединённом тексте блока",
+                  foreground="gray").pack(side=tk.LEFT, padx=(8, 0))
+
         field(right, "Имя файла:", self.fname_var)
         field(right, "Подпапка:", self.sub_var)
         field(right, "Имя при непризнании:", self.fb_name_var)
@@ -360,7 +370,7 @@ class PatternEditor(tk.Toplevel):
 
         hint = ttk.Label(
             right,
-            text=("Подставляются имена групп регулярки (?P<name>...) и {page}.\n"
+            text=("Подставляются имена групп регулярки (?P<name>...) и {page}, {page_end}, {pages}.\n"
                   "Фильтры: |cap |upper |lower |title. Слэш в подпапке — вложенные папки."),
             foreground="gray", justify=tk.LEFT,
         )
@@ -421,6 +431,7 @@ class PatternEditor(tk.Toplevel):
         self.flag_i.set("IGNORECASE" in fl)
         self.flag_s.set("DOTALL" in fl)
         self.flag_m.set("MULTILINE" in fl)
+        self.pages_per_doc_var.set(max(1, int(p.get("pages_per_document", 1) or 1)))
         self._dirty = False
 
     def _commit_current(self):
@@ -430,10 +441,15 @@ class PatternEditor(tk.Toplevel):
         if self.flag_i.get(): fl.append("IGNORECASE")
         if self.flag_s.get(): fl.append("DOTALL")
         if self.flag_m.get(): fl.append("MULTILINE")
+        try:
+            pages_per_doc = max(1, int(self.pages_per_doc_var.get()))
+        except (tk.TclError, ValueError):
+            pages_per_doc = 1
         self.cfg["patterns"][self._current_idx] = {
             "name": self.name_var.get().strip() or "Без названия",
             "regex": self.regex_txt.get("1.0", "end-1c"),
             "flags": fl,
+            "pages_per_document": pages_per_doc,
             "filename": self.fname_var.get(),
             "subfolder": self.sub_var.get(),
             "fallback_filename": self.fb_name_var.get(),
@@ -447,6 +463,7 @@ class PatternEditor(tk.Toplevel):
             "name": f"Новый шаблон {len(self.cfg['patterns']) + 1}",
             "regex": "",
             "flags": ["IGNORECASE", "DOTALL"],
+            "pages_per_document": 1,
             "filename": "{page}.pdf",
             "subfolder": "",
             "fallback_filename": "стр_{page}_не_распознано.pdf",

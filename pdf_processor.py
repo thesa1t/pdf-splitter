@@ -51,23 +51,15 @@ class PatternMatcher:
 
 
 def _ocr_image_bytes(png_bytes: bytes) -> str:
+    # PSM 4 (single column) устойчивее дефолтного 3 на бланках с таблицами:
+    # дефолт иногда целиком выкидывает блок ФИО из формы полиса.
     return pytesseract.image_to_string(
-        Image.open(io.BytesIO(png_bytes)), lang="rus"
+        Image.open(io.BytesIO(png_bytes)), lang="rus", config="--psm 4"
     )
 
 
 def _render_page_png(page: fitz.Page, dpi: int) -> bytes:
     return page.get_pixmap(dpi=dpi).tobytes("png")
-
-
-def _text_or_ocr(page: fitz.Page, matcher: PatternMatcher, dpi: int):
-    """Пытается вытащить данные из текстового слоя; если пусто — возвращает PNG для OCR."""
-    text = page.get_text()
-    if text and text.strip():
-        values = matcher.match(text)
-        if values:
-            return values, ""
-    return None, _render_page_png(page, dpi)
 
 
 def split_pdf(
@@ -80,6 +72,7 @@ def split_pdf(
     matcher = PatternMatcher(pattern)
     dpi = int(cfg.get("ocr_dpi", 200))
     workers = max(1, int(cfg.get("workers", 4)))
+    pages_per_doc = max(1, int(pattern.get("pages_per_document", 1) or 1))
 
     filename_tpl = pattern.get("filename") or "стр_{page}.pdf"
     subfolder_tpl = pattern.get("subfolder") or ""
@@ -89,16 +82,16 @@ def split_pdf(
     doc = fitz.open(input_path)
     total = len(doc)
 
-    # 1) Быстрая выборка текстового слоя; для пустых — рендерим PNG
-    quick = [None] * total
+    # 1) Текстовый слой для каждой страницы; пустые → в очередь OCR
+    page_texts: list[str] = [""] * total
     needs_ocr: list[tuple[int, bytes]] = []
 
     for i in range(total):
-        values, png = _text_or_ocr(doc[i], matcher, dpi)
-        if values is not None:
-            quick[i] = {"values": values, "debug": ""}
+        text = doc[i].get_text()
+        if text and text.strip():
+            page_texts[i] = text
         else:
-            needs_ocr.append((i, png))
+            needs_ocr.append((i, _render_page_png(doc[i], dpi)))
 
     # 2) Параллельный OCR (pytesseract — subprocess, GIL не мешает)
     if needs_ocr:
@@ -108,32 +101,37 @@ def split_pdf(
             for fut in as_completed(futures):
                 i = futures[fut]
                 try:
-                    ocr_text = fut.result()
+                    page_texts[i] = fut.result()
                 except Exception as e:
-                    quick[i] = {"values": None, "debug": f"OCR ERROR: {e}"}
-                else:
-                    values = matcher.match(ocr_text)
-                    quick[i] = {"values": values, "debug": ocr_text if not values else ""}
+                    page_texts[i] = f"[OCR ERROR: {e}]"
                 done += 1
                 if progress_callback:
                     progress_callback(done, len(needs_ocr), os.path.basename(input_path), "ocr")
 
-    # 3) Нарезка PDF в основном потоке (PyMuPDF не любит шаринг doc)
+    # 3) Группируем страницы по pages_per_doc и режем в основном потоке
+    groups = [(s, min(s + pages_per_doc, total)) for s in range(0, total, pages_per_doc)]
     results = []
-    for i in range(total):
-        info = quick[i] or {"values": None, "debug": ""}
-        values = info["values"]
-        debug = info["debug"]
+
+    for gi, (start, end) in enumerate(groups):
+        combined = "\n".join(page_texts[start:end]).strip()
+        values = matcher.match(combined) if combined else None
+
+        start_page = start + 1
+        end_page = end  # end — exclusive, 1-based последняя = end
+        pages_str = f"{start_page}-{end_page}" if end_page > start_page else str(start_page)
+
+        ctx_base = {"page": start_page, "page_end": end_page, "pages": pages_str}
 
         if values:
             ctx = dict(values)
-            ctx["page"] = i + 1
+            ctx.update(ctx_base)
             rel_name = render_template(filename_tpl, ctx)
             rel_sub = render_template(subfolder_tpl, ctx) if subfolder_tpl else ""
+            debug = ""
         else:
-            ctx = {"page": i + 1}
-            rel_name = render_template(fallback_name_tpl, ctx)
-            rel_sub = render_template(fallback_sub_tpl, ctx) if fallback_sub_tpl else ""
+            rel_name = render_template(fallback_name_tpl, ctx_base)
+            rel_sub = render_template(fallback_sub_tpl, ctx_base) if fallback_sub_tpl else ""
+            debug = combined
 
         if not rel_name.lower().endswith(".pdf"):
             rel_name += ".pdf"
@@ -152,21 +150,21 @@ def split_pdf(
 
         try:
             new = fitz.open()
-            new.insert_pdf(doc, from_page=i, to_page=i)
+            new.insert_pdf(doc, from_page=start, to_page=end - 1)
             new.save(out)
             new.close()
             results.append({
-                "page": i + 1, "filename": rel_name, "status": "ok",
+                "page": start_page, "filename": rel_name, "status": "ok",
                 "error": None, "debug": debug,
             })
         except Exception as e:
             results.append({
-                "page": i + 1, "filename": rel_name, "status": "error",
+                "page": start_page, "filename": rel_name, "status": "error",
                 "error": str(e), "debug": debug,
             })
 
         if progress_callback:
-            progress_callback(i + 1, total, os.path.basename(input_path), "split")
+            progress_callback(gi + 1, len(groups), os.path.basename(input_path), "split")
 
     doc.close()
     return results

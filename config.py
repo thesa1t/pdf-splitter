@@ -7,6 +7,7 @@
       "name": "Платёжные поручения",
       "regex": "гражданин[ауе]\\s+(?P<name>[А-ЯЁа-яё]+)\\s+(?P<surname>[А-ЯЁа-яё]+)\\s+[Сс]умма\\s+(?P<amount>\\d+)",
       "flags": ["IGNORECASE", "DOTALL"],
+      "pages_per_document": 1,
       "filename":  "пп{amount}_{name|cap} {surname|cap}.pdf",
       "subfolder": "пп{amount}",
       "fallback_filename": "стр_{page}_не_распознано.pdf",
@@ -18,7 +19,7 @@
   "workers": 4
 }
 
-В шаблонах filename/subfolder доступны имена групп из regex и {page}.
+В шаблонах filename/subfolder доступны имена групп из regex и {page}, {page_end}, {pages}.
 Фильтры: |cap (capitalize), |upper, |lower, |title.
 """
 
@@ -48,6 +49,7 @@ DEFAULT_CONFIG = {
             "name": "Платёжные поручения",
             "regex": r"гражданин[ауе]\s+(?P<name>[А-ЯЁа-яё]+)\s+(?P<surname>[А-ЯЁа-яё]+)\s+[Сс]умма\s+(?P<amount>\d+)",
             "flags": ["IGNORECASE", "DOTALL"],
+            "pages_per_document": 1,
             "filename": "пп{amount}_{name|cap} {surname|cap}.pdf",
             "subfolder": "пп{amount}",
             "fallback_filename": "стр_{page}_не_распознано.pdf",
@@ -57,14 +59,26 @@ DEFAULT_CONFIG = {
             "name": "Только ФИО",
             "regex": r"гражданин[ауе]\s+(?P<name>[А-ЯЁа-яё]+)\s+(?P<surname>[А-ЯЁа-яё]+)",
             "flags": ["IGNORECASE", "DOTALL"],
+            "pages_per_document": 1,
             "filename": "{name|cap} {surname|cap}.pdf",
+            "subfolder": "",
+            "fallback_filename": "стр_{page}_не_распознано.pdf",
+            "fallback_subfolder": "",
+        },
+        {
+            # `[О0]` — tesseract на сканах полисов стабильно видит цифру 0 вместо буквы О после двоеточия.
+            "name": "Полис ДМС мигранта",
+            "regex": r"Ф\.?\s*И\.?\s*[О0]\.?:?\s*(?P<surname>[А-ЯЁ][А-ЯЁ\-]+)\s+(?P<name>[А-ЯЁ][А-ЯЁ\-]+)",
+            "flags": ["IGNORECASE", "DOTALL"],
+            "pages_per_document": 1,
+            "filename": "ДМС_{surname|cap} {name|cap}.pdf",
             "subfolder": "",
             "fallback_filename": "стр_{page}_не_распознано.pdf",
             "fallback_subfolder": "",
         },
     ],
     "active": "Платёжные поручения",
-    "ocr_dpi": 200,
+    "ocr_dpi": 300,
     "workers": 4,
 }
 
