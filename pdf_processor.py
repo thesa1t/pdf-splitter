@@ -4,6 +4,7 @@ import io
 import os
 import re
 import shutil
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import fitz  # PyMuPDF
@@ -12,11 +13,29 @@ from PIL import Image
 
 from config import compile_flags, get_active_pattern, render_template
 
-# Путь к tesseract (PATH в .app может не включать Homebrew)
-_found = shutil.which("tesseract")
-if _found:
-    pytesseract.pytesseract.tesseract_cmd = _found
-else:
+
+def _resolve_tesseract():
+    """Tesseract бандлится внутрь .app/.exe — сначала ищем там, системный только для запуска из исходников."""
+    bundle_root = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+
+    if sys.platform == "win32":
+        bundled_bin = os.path.join(bundle_root, "Tesseract-OCR", "tesseract.exe")
+        bundled_data = os.path.join(bundle_root, "Tesseract-OCR", "tessdata")
+    else:
+        bundled_bin = os.path.join(bundle_root, "tesseract")
+        bundled_data = os.path.join(bundle_root, "tessdata")
+
+    if os.path.isfile(bundled_bin):
+        pytesseract.pytesseract.tesseract_cmd = bundled_bin
+        if os.path.isdir(bundled_data):
+            os.environ["TESSDATA_PREFIX"] = bundled_data
+        return
+
+    found = shutil.which("tesseract")
+    if found:
+        pytesseract.pytesseract.tesseract_cmd = found
+        return
+
     for p in [
         "/opt/homebrew/bin/tesseract",
         "/usr/local/bin/tesseract",
@@ -24,7 +43,10 @@ else:
     ]:
         if os.path.isfile(p):
             pytesseract.pytesseract.tesseract_cmd = p
-            break
+            return
+
+
+_resolve_tesseract()
 
 # Латинские буквы-двойники → кириллица (частый артефакт OCR)
 _LAT2CYR = str.maketrans(

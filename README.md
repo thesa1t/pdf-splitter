@@ -2,6 +2,8 @@
 
 Разделяет многостраничные PDF по настраиваемым паттернам: вытаскивает из каждой страницы нужные данные (например, ФИО и сумму) и сохраняет её как отдельный файл по вашему шаблону имени. Работает с текстовыми PDF и сканами (через Tesseract OCR).
 
+**Tesseract OCR встроен внутрь сборки — пользователю ничего ставить не нужно.**
+
 ---
 
 ## Установка — готовые сборки (рекомендовано)
@@ -11,23 +13,20 @@
 1. Скачай `PDF-Splitter-macOS.dmg` со страницы [Releases](../../releases/latest).
 2. Открой `.dmg` и перетащи «PDF Splitter» в папку `Applications`.
 3. При первом запуске: правый клик → «Открыть» (macOS просит разрешить неподписанное приложение).
-4. Установи Tesseract OCR (нужен для сканов):
-   ```bash
-   brew install tesseract tesseract-lang
-   ```
 
 ### Windows
 
 1. Скачай `PDF-Splitter-Windows.zip` со страницы [Releases](../../releases/latest).
 2. Распакуй архив в любую папку (например, `C:\Program Files\PDF Splitter\`).
 3. Дважды щёлкни `PDF Splitter.exe` (правый клик → «Отправить → Рабочий стол (создать ярлык)» для ярлыка).
-4. Установи Tesseract OCR: [UB-Mannheim build](https://github.com/UB-Mannheim/tesseract/wiki) (при установке отметь «Russian»).
+
+Перенос на сервер: скопируй всю папку с `.exe` целиком — внутри уже лежат бинарь и языковые данные Tesseract, никаких внешних зависимостей.
 
 ---
 
-## Установка — сборка из исходников
+## Сборка из исходников
 
-Если хочешь собрать сам (получишь свежую версию + ярлык на рабочем столе автоматически):
+Сборка нужна только разработчику. На машине, где ты собираешь, **Tesseract должен быть установлен** — скрипт берёт его оттуда и встраивает в готовый бандл.
 
 ### macOS
 ```bash
@@ -35,7 +34,7 @@ git clone https://github.com/thesa1t/pdf-splitter.git
 cd pdf-splitter
 ./build_macos.sh
 ```
-Скрипт установит зависимости, соберёт `.app`, положит в `/Applications` и создаст ярлык на рабочем столе.
+Скрипт сам поставит `tesseract`, `tesseract-lang`, `dylibbundler` через brew (если их нет), создаст venv, поставит pip-зависимости, соберёт `.app` с встроенным Tesseract и положит в `/Applications`.
 
 ### Windows
 ```batch
@@ -43,7 +42,7 @@ git clone https://github.com/thesa1t/pdf-splitter.git
 cd pdf-splitter
 build_windows.bat
 ```
-То же самое для Windows: `.exe` + ярлык на рабочем столе.
+Перед запуском поставь Tesseract: [UB-Mannheim build](https://github.com/UB-Mannheim/tesseract/wiki) (отметь «Russian language data»). Скрипт найдёт его в `C:\Program Files\Tesseract-OCR\` (или по `TESSERACT_HOME`), скопирует бинарь, DLL и `tessdata` (rus/eng/osd) внутрь готового `.exe`-бандла. Итог уже самодостаточен — переноси папку `dist\PDF Splitter\` куда угодно.
 
 ---
 
@@ -94,5 +93,8 @@ requirements.txt     — зависимости Python
 
 ## Требования
 
-- Python 3.10+
-- Tesseract OCR (с русским языковым пакетом) — только если у вас сканированные PDF без текстового слоя
+- **Конечному пользователю:** ничего, кроме самого `.app` / `.exe`. Tesseract встроен.
+- **Для сборки:**
+  - Python 3.10+
+  - Tesseract OCR с русским пакетом (`brew install tesseract tesseract-lang` на macOS / UB-Mannheim инсталлятор с «Russian language data» на Windows)
+  - macOS дополнительно: `dylibbundler` (`brew install dylibbundler`) — встраивает динамические библиотеки внутрь .app
