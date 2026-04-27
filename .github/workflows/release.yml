@@ -18,13 +18,45 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install deps
+      - name: Install Tesseract + dylibbundler
+        run: |
+          brew install tesseract tesseract-lang dylibbundler
+
+      - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
       - name: Generate icons
         run: python build_app.py
+
+      - name: Vendor Tesseract (binary + dylibs + tessdata)
+        run: |
+          set -e
+          TESS_BIN="$(command -v tesseract)"
+          TESS_REAL="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$TESS_BIN")"
+          TESS_DATA=""
+          for D in \
+              "$(brew --prefix)/share/tessdata" \
+              "$(brew --prefix tesseract)/share/tessdata" \
+              "/opt/homebrew/share/tessdata" \
+              "/usr/local/share/tessdata"; do
+              if [ -f "$D/rus.traineddata" ]; then
+                  TESS_DATA="$D"
+                  break
+              fi
+          done
+          if [ -z "$TESS_DATA" ]; then
+              echo "rus.traineddata not found"; exit 1
+          fi
+          rm -rf vendored
+          mkdir -p vendored/tessdata vendored/libs
+          cp "$TESS_REAL" vendored/tesseract
+          chmod +w vendored/tesseract
+          cp "$TESS_DATA/rus.traineddata" vendored/tessdata/
+          cp "$TESS_DATA/eng.traineddata" vendored/tessdata/ 2>/dev/null || true
+          cp "$TESS_DATA/osd.traineddata" vendored/tessdata/ 2>/dev/null || true
+          dylibbundler -od -b -x vendored/tesseract -d vendored/libs/ -p '@executable_path/libs/'
 
       - name: Build .app
         run: |
@@ -34,6 +66,9 @@ jobs:
             --osx-bundle-identifier com.salt.pdfsplitter \
             --hidden-import config \
             --hidden-import pdf_processor \
+            --add-binary "vendored/tesseract:." \
+            --add-binary "vendored/libs:libs" \
+            --add-data "vendored/tessdata:tessdata" \
             main.py
 
       - name: Create DMG
@@ -47,7 +82,7 @@ jobs:
             --app-drop-link 400 160 \
             "PDF-Splitter-macOS.dmg" \
             "dist/PDF Splitter.app" || \
-          (cd dist && zip -r ../PDF-Splitter-macOS.zip "PDF Splitter.app")
+          (cd dist && zip -ry ../PDF-Splitter-macOS.zip "PDF Splitter.app")
 
       - uses: actions/upload-artifact@v4
         with:
@@ -73,13 +108,45 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install deps
+      - name: Install Tesseract + Russian traineddata
+        shell: pwsh
+        run: |
+          choco install tesseract --no-progress -y
+          $tessDir = "C:\Program Files\Tesseract-OCR"
+          if (-not (Test-Path "$tessDir\tesseract.exe")) {
+            Write-Error "Tesseract install failed: $tessDir\tesseract.exe missing"
+            exit 1
+          }
+          New-Item -ItemType Directory -Force -Path "$tessDir\tessdata" | Out-Null
+          foreach ($lang in @('rus', 'eng', 'osd')) {
+            $dst = "$tessDir\tessdata\$lang.traineddata"
+            if (-not (Test-Path $dst)) {
+              Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tessdata/raw/main/$lang.traineddata" -OutFile $dst
+            }
+          }
+          echo "TESSERACT_HOME=$tessDir" >> $env:GITHUB_ENV
+
+      - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
       - name: Generate icons
         run: python build_app.py
+
+      - name: Vendor Tesseract (binary + DLLs + tessdata)
+        shell: pwsh
+        run: |
+          $tessDir = $env:TESSERACT_HOME
+          if (Test-Path vendored) { Remove-Item vendored -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path "vendored\Tesseract-OCR\tessdata" | Out-Null
+          Copy-Item "$tessDir\*.exe" "vendored\Tesseract-OCR\" -Force
+          Copy-Item "$tessDir\*.dll" "vendored\Tesseract-OCR\" -Force
+          Copy-Item "$tessDir\tessdata\rus.traineddata" "vendored\Tesseract-OCR\tessdata\" -Force
+          if (Test-Path "$tessDir\tessdata\eng.traineddata") { Copy-Item "$tessDir\tessdata\eng.traineddata" "vendored\Tesseract-OCR\tessdata\" -Force }
+          if (Test-Path "$tessDir\tessdata\osd.traineddata") { Copy-Item "$tessDir\tessdata\osd.traineddata" "vendored\Tesseract-OCR\tessdata\" -Force }
+          if (Test-Path "$tessDir\tessdata\configs") { Copy-Item "$tessDir\tessdata\configs" "vendored\Tesseract-OCR\tessdata\configs" -Recurse -Force }
+          if (Test-Path "$tessDir\tessdata\tessconfigs") { Copy-Item "$tessDir\tessdata\tessconfigs" "vendored\Tesseract-OCR\tessdata\tessconfigs" -Recurse -Force }
 
       - name: Build .exe
         run: >
@@ -88,6 +155,7 @@ jobs:
           --icon icon.ico
           --hidden-import config
           --hidden-import pdf_processor
+          --add-data "vendored/Tesseract-OCR;Tesseract-OCR"
           main.py
 
       - name: Zip artifact
