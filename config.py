@@ -56,16 +56,6 @@ DEFAULT_CONFIG = {
             "fallback_subfolder": "",
         },
         {
-            "name": "Только ФИО",
-            "regex": r"гражданин[ауе]\s+(?P<name>[А-ЯЁа-яё]+)\s+(?P<surname>[А-ЯЁа-яё]+)",
-            "flags": ["IGNORECASE", "DOTALL"],
-            "pages_per_document": 1,
-            "filename": "{name|cap} {surname|cap}.pdf",
-            "subfolder": "",
-            "fallback_filename": "стр_{page}_не_распознано.pdf",
-            "fallback_subfolder": "",
-        },
-        {
             # `[О0]` — tesseract на сканах полисов стабильно видит цифру 0 вместо буквы О после двоеточия.
             "name": "Полис ДМС",
             "regex": r"Ф\.?\s*И\.?\s*[О0]\.?:?\s*(?P<surname>[А-ЯЁ][А-ЯЁ\-]+)\s+(?P<name>[А-ЯЁ][А-ЯЁ\-]+)",
